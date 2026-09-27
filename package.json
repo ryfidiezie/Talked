@@ -1,0 +1,27 @@
+{
+  "name": "talked",
+  "version": "1.0.0",
+  "description": "Ultra low latency voice assistant powered by gemini 3.8 live",
+  "main": "main.js",
+  "scripts": {
+    "start": "npm run build && electron .",
+    "build": "vite build",
+    "dev": "vite",
+    "site": "npx serve website",
+    "electron": "electron ."
+  },
+  "keywords": [],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "lucide-react": "^1.16.0",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "screenshot-desktop": "^1.15.6"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^6.0.0",
+    "electron": "^41.10.7",
+    "vite": "^8.0.0"
+  }
+}

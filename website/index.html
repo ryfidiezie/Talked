@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Talked - A quiet floating launcher for Windows</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+  <nav class="site-nav">
+    <div class="nav-brand">talked</div>
+    <div class="nav-links">
+      <a href="#demo" class="nav-link">demo</a>
+      <a href="#features" class="nav-link">features</a>
+      <a href="#commands" class="nav-link">commands</a>
+      <a href="https://github.com" target="_blank" rel="noreferrer" class="nav-link">github</a>
+    </div>
+  </nav>
+
+  <div class="page-wrapper">
+    <section class="intro-section">
+      <h1 class="intro-title">A quiet floating launcher for Windows.</h1>
+      <p class="intro-text">
+        Talked stays out of the way until you press Alt+Space. It handles quick calculations, unit conversions, window snapping, clipboard history, and real-time voice with Gemini.
+      </p>
+      <div class="intro-actions">
+        <a href="#download" class="btn-solid">Download for Windows</a>
+        <a href="#demo" class="btn-outline">Try it in browser</a>
+      </div>
+    </section>
+
+    <section id="demo" class="demo-wrapper">
+      <div class="demo-label-row">
+        <span>Interactive preview</span>
+        <span class="demo-keys-hint">Alt + Space</span>
+      </div>
+
+      <div class="interactive-box">
+        <div class="bar-container">
+          <div class="bar-icon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="11" cy="11" r="8"></circle>
+              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+            </svg>
+          </div>
+
+          <input
+            id="simInput"
+            type="text"
+            class="bar-input"
+            placeholder="Type a math problem, command, or search..."
+            spellcheck="false"
+            autocomplete="off"
+          >
+
+          <div class="bar-toggle-group">
+            <button id="modeSearchBtn" class="toggle-btn active" title="Search mode">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="8" y1="6" x2="21" y2="6"></line>
+                <line x1="8" y1="12" x2="21" y2="12"></line>
+                <line x1="8" y1="18" x2="21" y2="18"></line>
+                <line x1="3" y1="6" x2="3.01" y2="6"></line>
+                <line x1="3" y1="12" x2="3.01" y2="12"></line>
+                <line x1="3" y1="18" x2="3.01" y2="18"></line>
+              </svg>
+            </button>
+            <button id="modeGridBtn" class="toggle-btn" title="Grid mode">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="3" width="7" height="7"></rect>
+                <rect x="14" y="3" width="7" height="7"></rect>
+                <rect x="14" y="14" width="7" height="7"></rect>
+                <rect x="3" y="14" width="7" height="7"></rect>
+              </svg>
+            </button>
+          </div>
+
+          <button id="simVoiceBtn" class="voice-toggle-btn" title="Voice demo">
+            <div class="voice-wave">
+              <span class="wave-bar"></span>
+              <span class="wave-bar"></span>
+              <span class="wave-bar"></span>
+            </div>
+            <span>voice</span>
+          </button>
+        </div>
+
+        <div id="simOutputBanner" class="output-strip" style="display: none;">
+          <span id="simOutputText"></span>
+          <button id="simCopyBtn" class="copy-pill-btn">Copy</button>
+        </div>
+
+        <div id="simResults" class="results-list"></div>
+
+        <div id="simActionGrid" class="grid-palette" style="display: none;">
+          <button class="grid-button" data-action="snap-left">
+            <div class="grid-icon">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"></rect><line x1="12" y1="3" x2="12" y2="21"></line></svg>
+            </div>
+            <span class="grid-name">Snap Left</span>
+          </button>
+
+          <button class="grid-button" data-action="snap-right">
+            <div class="grid-icon">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"></rect><line x1="12" y1="3" x2="12" y2="21"></line></svg>
+            </div>
+            <span class="grid-name">Snap Right</span>
+          </button>
+
+          <button class="grid-button" data-action="maximize">
+            <div class="grid-icon">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"></path></svg>
+            </div>
+            <span class="grid-name">Maximize</span>
+          </button>
+
+          <button class="grid-button" data-action="minimize">
+            <div class="grid-icon">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+            </div>
+            <span class="grid-name">Show Desktop</span>
+          </button>
+
+          <button class="grid-button" data-action="color">
+            <div class="grid-icon">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m2 22 1-1h3l9-9-4-4-9 9v3l1 1z"></path><path d="M14.5 5.5 18 2l4 4-3.5 3.5"></path></svg>
+            </div>
+            <span class="grid-name">Pick Color</span>
+          </button>
+
+          <button class="grid-button" data-action="screenshot">
+            <div class="grid-icon">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>
+            </div>
+            <span class="grid-name">Screenshot</span>
+          </button>
+
+          <button class="grid-button" data-action="clips">
+            <div class="grid-icon">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1"></rect></svg>
+            </div>
+            <span class="grid-name">Clipboards</span>
+          </button>
+
+          <button class="grid-button" data-action="vol-mute">
+            <div class="grid-icon">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><line x1="23" y1="9" x2="17" y2="15"></line><line x1="17" y1="9" x2="23" y2="15"></line></svg>
+            </div>
+            <span class="grid-name">Mute</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="suggestion-chips">
+        <span style="font-size: 12px; color: var(--text-dim);">Try typing:</span>
+        <button class="s-chip" data-query="12 * 8.5">12 * 8.5</button>
+        <button class="s-chip" data-query="75 f to c">75 f to c</button>
+        <button class="s-chip" data-query="/clip">/clip</button>
+        <button class="s-chip" data-query="/ip">/ip</button>
+        <button class="s-chip" data-query="/sysinfo">/sysinfo</button>
+        <button class="s-chip" data-query="/snap left">/snap left</button>
+      </div>
+    </section>
+
+    <section id="features" class="section-block">
+      <h2 class="section-title">What it does</h2>
+      <div class="features-list">
+        <div class="feature-item">
+          <h3 class="feature-heading">Fast calculations</h3>
+          <p class="feature-body">
+            Type expressions, unit conversions, or currency rates straight into the search box. No need to open a separate calculator app.
+          </p>
+        </div>
+
+        <div class="feature-item">
+          <h3 class="feature-heading">Action grid</h3>
+          <p class="feature-body">
+            Hit Tab to switch to a visual grid of common desktop actions: snap windows, grab screen pixel colors, or mute system audio.
+          </p>
+        </div>
+
+        <div class="feature-item">
+          <h3 class="feature-heading">Local clipboard history</h3>
+          <p class="feature-body">
+            Talked quietly saves your recent copies in the background. Type /clip to search through past snippets and paste them back.
+          </p>
+        </div>
+
+        <div class="feature-item">
+          <h3 class="feature-heading">Gemini live voice</h3>
+          <p class="feature-body">
+            Direct streaming voice connection over WebSockets. Talk naturally with low latency when your hands are busy.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section id="commands" class="section-block">
+      <h2 class="section-title">Common commands</h2>
+      <div class="commands-compact-list">
+        <div class="cmd-row">
+          <div class="cmd-left">
+            <span class="cmd-name">/clip</span>
+            <span class="cmd-desc">Browse and search recent clipboard history</span>
+          </div>
+          <button class="cmd-copy" data-copy="/clip">copy</button>
+        </div>
+
+        <div class="cmd-row">
+          <div class="cmd-left">
+            <span class="cmd-name">/ip</span>
+            <span class="cmd-desc">Show local and network IP addresses</span>
+          </div>
+          <button class="cmd-copy" data-copy="/ip">copy</button>
+        </div>
+
+        <div class="cmd-row">
+          <div class="cmd-left">
+            <span class="cmd-name">/sysinfo</span>
+            <span class="cmd-desc">CPU architecture, memory, and OS version</span>
+          </div>
+          <button class="cmd-copy" data-copy="/sysinfo">copy</button>
+        </div>
+
+        <div class="cmd-row">
+          <div class="cmd-left">
+            <span class="cmd-name">/time</span>
+            <span class="cmd-desc">Current local time with seconds</span>
+          </div>
+          <button class="cmd-copy" data-copy="/time">copy</button>
+        </div>
+
+        <div class="cmd-row">
+          <div class="cmd-left">
+            <span class="cmd-name">/snap left</span>
+            <span class="cmd-desc">Snap active window to the left half</span>
+          </div>
+          <button class="cmd-copy" data-copy="/snap left">copy</button>
+        </div>
+
+        <div class="cmd-row">
+          <div class="cmd-left">
+            <span class="cmd-name">/snap right</span>
+            <span class="cmd-desc">Snap active window to the right half</span>
+          </div>
+          <button class="cmd-copy" data-copy="/snap right">copy</button>
+        </div>
+
+        <div class="cmd-row">
+          <div class="cmd-left">
+            <span class="cmd-name">/vol mute</span>
+            <span class="cmd-desc">Toggle master system audio mute</span>
+          </div>
+          <button class="cmd-copy" data-copy="/vol mute">copy</button>
+        </div>
+
+        <div class="cmd-row">
+          <div class="cmd-left">
+            <span class="cmd-name">/lock</span>
+            <span class="cmd-desc">Lock your Windows workstation</span>
+          </div>
+          <button class="cmd-copy" data-copy="/lock">copy</button>
+        </div>
+      </div>
+    </section>
+
+    <section id="download" class="section-block">
+      <div class="download-card">
+        <div class="download-info">
+          <h3 class="download-title">Get Talked for Windows</h3>
+          <p class="download-subtitle">Open source, lightweight, runs locally on Windows 10 and 11.</p>
+        </div>
+        <a href="https://github.com" target="_blank" rel="noreferrer" class="btn-solid">Download Release</a>
+      </div>
+    </section>
+
+    <footer class="footer">
+      <span>talked - free and open source</span>
+      <span>Windows x64</span>
+    </footer>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Talked Overlay</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      pointer-events: none;
+      user-select: none;
+    }
+    body, html {
+      width: 100vw;
+      height: 100vh;
+      overflow: hidden;
+      background: transparent;
+    }
+    #highlight-layer {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+    }
+    .screen-highlight-box {
+      position: absolute;
+      border: 3px solid #8ab4f8;
+      border-radius: 12px;
+      box-shadow: 0 0 24px rgba(138, 180, 248, 0.5), inset 0 0 16px rgba(138, 180, 248, 0.2);
+      transition: opacity 0.4s ease, transform 0.2s ease;
+      animation: highlight-pulse 1.8s infinite alternate ease-in-out;
+    }
+    @keyframes highlight-pulse {
+      0% {
+        box-shadow: 0 0 16px rgba(138, 180, 248, 0.4), inset 0 0 8px rgba(138, 180, 248, 0.15);
+      }
+      100% {
+        box-shadow: 0 0 32px rgba(138, 180, 248, 0.8), inset 0 0 24px rgba(138, 180, 248, 0.3);
+      }
+    }
+    .screen-drawing-group {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      transition: opacity 0.4s ease;
+    }
+    .highlight-label-chip {
+      position: absolute;
+      background-color: #1e1f20;
+      color: #e3e3e3;
+      border: 1px solid #8ab4f8;
+      border-radius: 6px;
+      padding: 4px 10px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-size: 12px;
+      font-weight: 600;
+      white-space: nowrap;
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.7);
+      pointer-events: none;
+    }
+    .circle-pulse {
+      animation: circle-dash 2s linear infinite;
+    }
+    @keyframes circle-dash {
+      to {
+        stroke-dashoffset: -30;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div id="highlight-layer"></div>
+  <script>
+    const layer = document.getElementById("highlight-layer");
+
+    function renderDrawing(data) {
+      const group = document.createElement("div");
+      group.className = "screen-drawing-group";
+
+      const color = data.color || "#8ab4f8";
+      const shape = data.shape || "box";
+      const winW = window.innerWidth;
+      const winH = window.innerHeight;
+
+      if (shape === "box") {
+        const box = document.createElement("div");
+        box.className = "screen-highlight-box";
+        const x = typeof data.x === "number" ? Math.max(0, Math.min(100, data.x)) : 10;
+        const y = typeof data.y === "number" ? Math.max(0, Math.min(100, data.y)) : 10;
+        const w = typeof data.width === "number" ? Math.max(2, Math.min(100 - x, data.width)) : 25;
+        const h = typeof data.height === "number" ? Math.max(2, Math.min(100 - y, data.height)) : 18;
+
+        box.style.left = x + "%";
+        box.style.top = y + "%";
+        box.style.width = w + "%";
+        box.style.height = h + "%";
+        box.style.borderColor = color;
+        box.style.boxShadow = `0 0 24px ${color}80, inset 0 0 16px ${color}33`;
+
+        if (data.label) {
+          const chip = document.createElement("div");
+          chip.className = "highlight-label-chip";
+          chip.textContent = data.label;
+          chip.style.borderColor = color;
+          chip.style.top = "-34px";
+          chip.style.left = "0px";
+          box.appendChild(chip);
+        }
+        group.appendChild(box);
+      } else if (shape === "arrow") {
+        let x1, y1, x2, y2;
+        if (typeof data.startX === "number" && typeof data.endX === "number") {
+          x1 = (data.startX / 100) * winW;
+          y1 = (data.startY / 100) * winH;
+          x2 = (data.endX / 100) * winW;
+          y2 = (data.endY / 100) * winH;
+        } else {
+          const targetX = typeof data.x === "number" ? (data.x / 100) * winW : winW * 0.5;
+          const targetY = typeof data.y === "number" ? (data.y / 100) * winH : winH * 0.5;
+          x1 = targetX - 70;
+          y1 = targetY - 60;
+          x2 = targetX;
+          y2 = targetY;
+        }
+
+        const angle = Math.atan2(y2 - y1, x2 - x1);
+        const headLen = 20;
+        const leftX = x2 - headLen * Math.cos(angle - Math.PI / 6);
+        const leftY = y2 - headLen * Math.sin(angle - Math.PI / 6);
+        const rightX = x2 - headLen * Math.cos(angle + Math.PI / 6);
+        const rightY = y2 - headLen * Math.sin(angle + Math.PI / 6);
+
+        const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+        svg.setAttribute("width", "100%");
+        svg.setAttribute("height", "100%");
+        svg.style.position = "absolute";
+        svg.style.top = "0";
+        svg.style.left = "0";
+
+        const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+        line.setAttribute("x1", x1);
+        line.setAttribute("y1", y1);
+        line.setAttribute("x2", x2 - 10 * Math.cos(angle));
+        line.setAttribute("y2", y2 - 10 * Math.sin(angle));
+        line.setAttribute("stroke", color);
+        line.setAttribute("stroke-width", "4");
+        line.setAttribute("stroke-linecap", "round");
+        line.style.filter = `drop-shadow(0 0 8px ${color})`;
+        svg.appendChild(line);
+
+        const head = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
+        head.setAttribute("points", `${x2},${y2} ${leftX},${leftY} ${rightX},${rightY}`);
+        head.setAttribute("fill", color);
+        head.style.filter = `drop-shadow(0 0 10px ${color})`;
+        svg.appendChild(head);
+
+        group.appendChild(svg);
+
+        if (data.label) {
+          const chip = document.createElement("div");
+          chip.className = "highlight-label-chip";
+          chip.textContent = data.label;
+          chip.style.borderColor = color;
+          chip.style.left = Math.max(10, x1 - 20) + "px";
+          chip.style.top = Math.max(10, y1 - 32) + "px";
+          group.appendChild(chip);
+        }
+      } else if (shape === "line") {
+        const x1 = ((data.startX !== undefined ? data.startX : data.x || 10) / 100) * winW;
+        const y1 = ((data.startY !== undefined ? data.startY : data.y || 10) / 100) * winH;
+        const x2 = ((data.endX !== undefined ? data.endX : (data.x || 10) + 20) / 100) * winW;
+        const y2 = ((data.endY !== undefined ? data.endY : (data.y || 10) + 20) / 100) * winH;
+
+        const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+        svg.setAttribute("width", "100%");
+        svg.setAttribute("height", "100%");
+        svg.style.position = "absolute";
+        svg.style.top = "0";
+        svg.style.left = "0";
+
+        const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+        line.setAttribute("x1", x1);
+        line.setAttribute("y1", y1);
+        line.setAttribute("x2", x2);
+        line.setAttribute("y2", y2);
+        line.setAttribute("stroke", color);
+        line.setAttribute("stroke-width", "4");
+        line.setAttribute("stroke-linecap", "round");
+        line.style.filter = `drop-shadow(0 0 8px ${color})`;
+        svg.appendChild(line);
+        group.appendChild(svg);
+
+        if (data.label) {
+          const chip = document.createElement("div");
+          chip.className = "highlight-label-chip";
+          chip.textContent = data.label;
+          chip.style.borderColor = color;
+          chip.style.left = ((x1 + x2) / 2) + "px";
+          chip.style.top = ((y1 + y2) / 2 - 30) + "px";
+          group.appendChild(chip);
+        }
+      } else if (shape === "circle") {
+        const cx = ((data.x !== undefined ? data.x : 50) / 100) * winW;
+        const cy = ((data.y !== undefined ? data.y : 50) / 100) * winH;
+        const r = typeof data.width === "number" ? ((data.width / 100) * winW) / 2 : 36;
+
+        const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+        svg.setAttribute("width", "100%");
+        svg.setAttribute("height", "100%");
+        svg.style.position = "absolute";
+        svg.style.top = "0";
+        svg.style.left = "0";
+
+        const circ = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+        circ.setAttribute("cx", cx);
+        circ.setAttribute("cy", cy);
+        circ.setAttribute("r", r);
+        circ.setAttribute("fill", `${color}22`);
+        circ.setAttribute("stroke", color);
+        circ.setAttribute("stroke-width", "3");
+        circ.setAttribute("stroke-dasharray", "8, 5");
+        circ.setAttribute("class", "circle-pulse");
+        circ.style.filter = `drop-shadow(0 0 12px ${color})`;
+        svg.appendChild(circ);
+
+        const dot = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+        dot.setAttribute("cx", cx);
+        dot.setAttribute("cy", cy);
+        dot.setAttribute("r", 5);
+        dot.setAttribute("fill", color);
+        svg.appendChild(dot);
+
+        group.appendChild(svg);
+
+        if (data.label) {
+          const chip = document.createElement("div");
+          chip.className = "highlight-label-chip";
+          chip.textContent = data.label;
+          chip.style.borderColor = color;
+          chip.style.left = cx + "px";
+          chip.style.top = (cy - r - 32) + "px";
+          chip.style.transform = "translateX(-50%)";
+          group.appendChild(chip);
+        }
+      }
+
+      layer.appendChild(group);
+
+      const duration = data.durationMs || 5000;
+      setTimeout(() => {
+        group.style.opacity = "0";
+        setTimeout(() => {
+          if (group.parentNode) {
+            group.parentNode.removeChild(group);
+          }
+        }, 500);
+      }, duration);
+    }
+
+    if (window.talkedOverlay) {
+      window.talkedOverlay.onHighlight((data) => {
+        renderDrawing(data);
+      });
+    }
+  </script>
+</body>
+</html>
