@@ -3,11 +3,15 @@ const path = require("path");
 const fs = require("fs");
 const { exec, execSync } = require("child_process");
 const https = require("https");
+const IS_LINUX = process.platform === "linux";
 
 app.commandLine.appendSwitch("autoplay-policy", "no-user-gesture-required");
 app.commandLine.appendSwitch("use-fake-ui-for-media-stream");
 app.commandLine.appendSwitch("disable-background-timer-throttling");
 app.commandLine.appendSwitch("disable-renderer-backgrounding");
+if (IS_LINUX) {
+  app.commandLine.appendSwitch("enable-transparent-visuals");
+}
 
 let mainWindow = null;
 let overlayWindow = null;
@@ -196,13 +200,16 @@ function createWindow() {
   }
 
   let isReadyForBlur = false;
+  let blurHideTimer = null;
+
+  const alwaysOnTopLevel = IS_LINUX ? "pop-up-menu" : "screen-saver";
 
   const bringToFront = () => {
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.show();
       mainWindow.focus();
       mainWindow.moveTop();
-      mainWindow.setAlwaysOnTop(true, "screen-saver");
+      mainWindow.setAlwaysOnTop(true, alwaysOnTopLevel);
       setTimeout(() => {
         isReadyForBlur = true;
       }, 1200);
@@ -220,9 +227,19 @@ function createWindow() {
     if (!isReadyForBlur) {
       return;
     }
-    if (mainWindow && mainWindow.isVisible()) {
-      mainWindow.webContents.send("toggle-talked", { action: "blur" });
-      mainWindow.hide();
+    if (blurHideTimer) clearTimeout(blurHideTimer);
+    blurHideTimer = setTimeout(() => {
+      if (mainWindow && !mainWindow.isDestroyed() && mainWindow.isVisible() && !mainWindow.isFocused()) {
+        mainWindow.webContents.send("toggle-talked", { action: "blur" });
+        mainWindow.hide();
+      }
+    }, IS_LINUX ? 80 : 0);
+  });
+
+  mainWindow.on("focus", () => {
+    if (blurHideTimer) {
+      clearTimeout(blurHideTimer);
+      blurHideTimer = null;
     }
   });
 
@@ -232,6 +249,13 @@ function createWindow() {
 }
 
 function getPreviousWindowTitle() {
+  if (IS_LINUX) {
+    try {
+      return execSync("xdotool getactivewindow getwindowname", { timeout: 600 }).toString().trim();
+    } catch (_) {
+      return "";
+    }
+  }
   try {
     const title = execSync(
       `powershell -NoProfile -NonInteractive -Command "(Get-Process | Where-Object {$_.MainWindowTitle -ne '' -and $_.ProcessName -notmatch 'electron'} | Sort-Object CPU -Descending | Select-Object -First 1).MainWindowTitle"`,
@@ -292,7 +316,7 @@ function toggleWindow() {
     mainWindow.show();
     mainWindow.focus();
     mainWindow.moveTop();
-    mainWindow.setAlwaysOnTop(true, "screen-saver");
+    mainWindow.setAlwaysOnTop(true, IS_LINUX ? "pop-up-menu" : "screen-saver");
     mainWindow.webContents.send("toggle-talked", { action: "activate" });
   }
 }
@@ -319,13 +343,21 @@ app.whenReady().then(() => {
   loadClipboardHistory();
   startClipboardWatcher();
 
-  const toggleShortcuts = ["Alt+Space", "CommandOrControl+Space", "CommandOrControl+Shift+Space"];
+  const toggleShortcuts = IS_LINUX
+    ? ["CommandOrControl+Space", "CommandOrControl+Shift+Space", "Super+Space"]
+    : ["Alt+Space", "CommandOrControl+Space", "CommandOrControl+Shift+Space"];
+
   for (const sc of toggleShortcuts) {
     try {
-      globalShortcut.register(sc, () => {
+      const ok = globalShortcut.register(sc, () => {
         toggleWindow();
       });
-    } catch (err) {}
+      if (!ok) {
+        console.log(`[TALKED] Failed to register shortcut: ${sc}`);
+      }
+    } catch (err) {
+      console.log(`[TALKED] Error registering shortcut ${sc}:`, err.message);
+    }
   }
 
   try {
@@ -460,9 +492,15 @@ app.whenReady().then(() => {
     }
     return new Promise((resolve) => {
       setTimeout(() => {
-        exec(`powershell -NoProfile -NonInteractive -Command "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.SendKeys]::SendWait('^v')"`, { windowsHide: true }, () => {
-          resolve({ success: true });
-        });
+        if (IS_LINUX) {
+          exec("xdotool key --clearmodifiers ctrl+v || ydotool key 29:1 47:1 47:0 29:0", () => {
+            resolve({ success: true });
+          });
+        } else {
+          exec(`powershell -NoProfile -NonInteractive -Command "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.SendKeys]::SendWait('^v')"`, { windowsHide: true }, () => {
+            resolve({ success: true });
+          });
+        }
       }, 150);
     });
   });
@@ -660,13 +698,13 @@ app.whenReady().then(() => {
     }
     return new Promise((resolve) => {
       setTimeout(() => {
-        if (process.platform === "linux") {
+        if (IS_LINUX) {
           let cmd = "";
           if (action === "snap-left") cmd = "xdotool key super+Left";
           else if (action === "snap-right") cmd = "xdotool key super+Right";
-          else if (action === "maximize") cmd = "wmctrl -r :ACTIVE: -b toggle,maximized_vert,maximized_horz";
+          else if (action === "maximize") cmd = "wmctrl -r :ACTIVE: -b toggle,maximized_vert,maximized_horz || xdotool getactivewindow windowstate --add MAXIMIZED_VERT,MAXIMIZED_HORZ";
           else if (action === "minimize") cmd = "xdotool getactivewindow windowminimize";
-          else if (action === "show-desktop") cmd = "xdotool key super+d";
+          else if (action === "show-desktop") cmd = "qdbus org.kde.KWin /KWin showDesktop 2>/dev/null || wmctrl -k on 2>/dev/null || xdotool key super+d";
           if (cmd) {
             exec(cmd, () => resolve({ success: true }));
             return;
@@ -905,9 +943,15 @@ app.whenReady().then(() => {
       const script = args.script || "";
       if (!script) return { error: "No script" };
       return new Promise((resolve) => {
-        exec(psEnc(script), { windowsHide: true, timeout: 10000 }, (err, stdout, stderr) =>
-          resolve({ stdout: (stdout || "").trim(), stderr: (stderr || "").trim(), exitCode: err ? err.code : 0 })
-        );
+        if (IS_LINUX) {
+          exec(`bash -c ${JSON.stringify(script)}`, { timeout: 10000 }, (err, stdout, stderr) =>
+            resolve({ stdout: (stdout || "").trim(), stderr: (stderr || "").trim(), exitCode: err ? err.code : 0 })
+          );
+        } else {
+          exec(psEnc(script), { windowsHide: true, timeout: 10000 }, (err, stdout, stderr) =>
+            resolve({ stdout: (stdout || "").trim(), stderr: (stderr || "").trim(), exitCode: err ? err.code : 0 })
+          );
+        }
       });
     }
 
@@ -1056,11 +1100,15 @@ app.whenReady().then(() => {
       const tx = Math.round(args.x || 0);
       const ty = Math.round(args.y || 0);
       return new Promise((resolve) => {
-        exec(
-          `powershell -NoProfile -NonInteractive -Command "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.Cursor]::Position = New-Object System.Drawing.Point(${tx}, ${ty})"`,
-          { windowsHide: true },
-          (err) => resolve(err ? { success: false, error: err.message } : { success: true, x: tx, y: ty })
-        );
+        if (IS_LINUX) {
+          exec(`xdotool mousemove ${tx} ${ty}`, (err) => resolve(err ? { success: false, error: err.message } : { success: true, x: tx, y: ty }));
+        } else {
+          exec(
+            `powershell -NoProfile -NonInteractive -Command "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.Cursor]::Position = New-Object System.Drawing.Point(${tx}, ${ty})"`,
+            { windowsHide: true },
+            (err) => resolve(err ? { success: false, error: err.message } : { success: true, x: tx, y: ty })
+          );
+        }
       });
     }
 
@@ -1069,17 +1117,25 @@ app.whenReady().then(() => {
       const cy = Math.round(args.y || 0);
       const button = args.button || "left";
       const dbl = args.double === true;
-      const clickScript = dbl
-        ? `[System.Windows.Forms.Cursor]::Position = New-Object System.Drawing.Point(${cx}, ${cy}); Start-Sleep -Milliseconds 80; Add-Type -MemberDefinition '[DllImport("user32.dll")] public static extern void mouse_event(int f,int x,int y,int d,int e);' -Name U -Namespace W; [W.U]::mouse_event(2,0,0,0,0); [W.U]::mouse_event(4,0,0,0,0); Start-Sleep -Milliseconds 60; [W.U]::mouse_event(2,0,0,0,0); [W.U]::mouse_event(4,0,0,0,0);`
-        : button === "right"
-        ? `[System.Windows.Forms.Cursor]::Position = New-Object System.Drawing.Point(${cx}, ${cy}); Start-Sleep -Milliseconds 80; Add-Type -MemberDefinition '[DllImport("user32.dll")] public static extern void mouse_event(int f,int x,int y,int d,int e);' -Name U -Namespace W; [W.U]::mouse_event(8,0,0,0,0); [W.U]::mouse_event(16,0,0,0,0);`
-        : `[System.Windows.Forms.Cursor]::Position = New-Object System.Drawing.Point(${cx}, ${cy}); Start-Sleep -Milliseconds 80; Add-Type -MemberDefinition '[DllImport("user32.dll")] public static extern void mouse_event(int f,int x,int y,int d,int e);' -Name U -Namespace W; [W.U]::mouse_event(2,0,0,0,0); [W.U]::mouse_event(4,0,0,0,0);`;
       return new Promise((resolve) => {
-        exec(
-          `powershell -NoProfile -NonInteractive -Command "Add-Type -AssemblyName System.Windows.Forms; ${clickScript}"`,
-          { windowsHide: true },
-          (err) => resolve(err ? { success: false, error: err.message } : { success: true, x: cx, y: cy, button })
-        );
+        if (IS_LINUX) {
+          const btn = button === "right" ? 3 : 1;
+          const clickCmd = dbl
+            ? `xdotool mousemove ${cx} ${cy} click --repeat 2 ${btn}`
+            : `xdotool mousemove ${cx} ${cy} click ${btn}`;
+          exec(clickCmd, (err) => resolve(err ? { success: false, error: err.message } : { success: true, x: cx, y: cy, button }));
+        } else {
+          const clickScript = dbl
+            ? `[System.Windows.Forms.Cursor]::Position = New-Object System.Drawing.Point(${cx}, ${cy}); Start-Sleep -Milliseconds 80; Add-Type -MemberDefinition '[DllImport("user32.dll")] public static extern void mouse_event(int f,int x,int y,int d,int e);' -Name U -Namespace W; [W.U]::mouse_event(2,0,0,0,0); [W.U]::mouse_event(4,0,0,0,0); Start-Sleep -Milliseconds 60; [W.U]::mouse_event(2,0,0,0,0); [W.U]::mouse_event(4,0,0,0,0);`
+            : button === "right"
+            ? `[System.Windows.Forms.Cursor]::Position = New-Object System.Drawing.Point(${cx}, ${cy}); Start-Sleep -Milliseconds 80; Add-Type -MemberDefinition '[DllImport("user32.dll")] public static extern void mouse_event(int f,int x,int y,int d,int e);' -Name U -Namespace W; [W.U]::mouse_event(8,0,0,0,0); [W.U]::mouse_event(16,0,0,0,0);`
+            : `[System.Windows.Forms.Cursor]::Position = New-Object System.Drawing.Point(${cx}, ${cy}); Start-Sleep -Milliseconds 80; Add-Type -MemberDefinition '[DllImport("user32.dll")] public static extern void mouse_event(int f,int x,int y,int d,int e);' -Name U -Namespace W; [W.U]::mouse_event(2,0,0,0,0); [W.U]::mouse_event(4,0,0,0,0);`;
+          exec(
+            `powershell -NoProfile -NonInteractive -Command "Add-Type -AssemblyName System.Windows.Forms; ${clickScript}"`,
+            { windowsHide: true },
+            (err) => resolve(err ? { success: false, error: err.message } : { success: true, x: cx, y: cy, button })
+          );
+        }
       });
     }
 
@@ -1097,9 +1153,15 @@ app.whenReady().then(() => {
       });
       if (!allowed) return { error: "User denied" };
       return new Promise((resolve) => {
-        exec(`powershell -NoProfile -NonInteractive -Command "${cmd.replace(/"/g, '\\"')}"`, { windowsHide: true, timeout: 15000 }, (err, stdout, stderr) => {
-          resolve({ stdout: (stdout || "").trim(), stderr: (stderr || "").trim(), exitCode: err ? err.code : 0 });
-        });
+        if (IS_LINUX) {
+          exec(`bash -c ${JSON.stringify(cmd)}`, { timeout: 15000 }, (err, stdout, stderr) => {
+            resolve({ stdout: (stdout || "").trim(), stderr: (stderr || "").trim(), exitCode: err ? err.code : 0 });
+          });
+        } else {
+          exec(`powershell -NoProfile -NonInteractive -Command "${cmd.replace(/"/g, '\\"')}"`, { windowsHide: true, timeout: 15000 }, (err, stdout, stderr) => {
+            resolve({ stdout: (stdout || "").trim(), stderr: (stderr || "").trim(), exitCode: err ? err.code : 0 });
+          });
+        }
       });
     }
 

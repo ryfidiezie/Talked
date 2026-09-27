@@ -129,7 +129,7 @@ export class GeminiTextClient extends GeminiLiveClient {
       },
       {
         name: "runCommand",
-        description: "Run a PowerShell command. The user will be asked to confirm before execution.",
+        description: "Run a shell command (bash on Linux, PowerShell on Windows). The user will be asked to confirm before execution.",
         parameters: {
           type: "OBJECT",
           properties: { command: { type: "STRING" } },

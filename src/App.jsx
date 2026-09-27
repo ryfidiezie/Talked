@@ -4,6 +4,9 @@ import { ResultsPanel } from "./components/ResultsPanel";
 import { ActionGrid } from "./components/ActionGrid";
 import { SettingsModal } from "./components/SettingsModal";
 import { CommandConfirmModal } from "./components/CommandConfirmModal";
+import { SpotlightBar } from "./components/SpotlightBar";
+import { DialogueFeed } from "./components/DialogueFeed";
+import { GeminiTextClient } from "./services/geminiTextClient";
 import { tryCalc, matchBuiltins, executeBuiltin } from "./commands/builtins";
 import { tryConvert } from "./utils/converters";
 
@@ -172,6 +175,24 @@ export function App() {
   const [clipboardItems, setClipboardItems] = useState([]);
   const [directoryItems, setDirectoryItems] = useState([]);
 
+  const [aiState, setAiState] = useState("idle");
+  const [aiTurns, setAiTurns] = useState([]);
+  const [aiCurrentTurn, setAiCurrentTurn] = useState({});
+  const [aiMicLevel, setAiMicLevel] = useState(0);
+  const [aiIsListening, setAiIsListening] = useState(false);
+  const [aiIsMuted, setAiIsMuted] = useState(false);
+  const [aiIsUserSpeaking, setAiIsUserSpeaking] = useState(false);
+  const [aiIsTransmitting, setAiIsTransmitting] = useState(false);
+  const [aiIsCapturingScreen, setAiIsCapturingScreen] = useState(false);
+  const [aiScreenShareActive, setAiScreenShareActive] = useState(false);
+  const [aiAttachedImage, setAiAttachedImage] = useState(null);
+  const [aiErrorMessage, setAiErrorMessage] = useState("");
+  const [aiModel, setAiModel] = useState("models/gemini-3.8-live");
+  const [aiModelMenuOpen, setAiModelMenuOpen] = useState(false);
+  const [aiQuery, setAiQuery] = useState("");
+  const aiClientRef = useRef(null);
+  const aiTurnIdRef = useRef(0);
+
   const appRootRef = useRef(null);
 
   useEffect(() => {
@@ -315,6 +336,109 @@ export function App() {
     ro.observe(el);
     return () => ro.disconnect();
   }, [activeMode]);
+
+  const getOrCreateAiClient = useCallback(() => {
+    if (!aiClientRef.current) {
+      aiClientRef.current = new GeminiTextClient({
+        apiKey: apiKey,
+        model: aiModel,
+        onStateChange: (s) => {
+          setAiState(s);
+          setAiIsListening(s === "listening");
+        },
+        onTranscript: (text, role) => {
+          if (role === "user") {
+            setAiCurrentTurn((prev) => ({ ...prev, user: text }));
+          } else {
+            setAiCurrentTurn((prev) => ({ ...prev, model: (prev.model || "") + text }));
+          }
+        },
+        onError: (msg) => setAiErrorMessage(msg),
+        onMicLevel: (level, speaking) => {
+          setAiMicLevel(level);
+          setAiIsUserSpeaking(speaking);
+        },
+        onAudioTx: () => setAiIsTransmitting(true),
+        onSpeechEnd: () => {
+          setAiIsTransmitting(false);
+          setAiCurrentTurn((prev) => {
+            const id = ++aiTurnIdRef.current;
+            if (prev.user || prev.model) {
+              setAiTurns((turns) => [...turns, { ...prev, id }]);
+            }
+            return {};
+          });
+        },
+        onToolCall: async (name, args) => {
+          return await window.talkedDesktop?.executeTool(name, args) ?? { success: false };
+        }
+      });
+    } else {
+      aiClientRef.current.setApiKey(apiKey);
+      aiClientRef.current.setModel(aiModel);
+    }
+    return aiClientRef.current;
+  }, [apiKey, aiModel]);
+
+  const handleAiToggleMic = useCallback(() => {
+    if (!apiKey) {
+      setShowSettings(true);
+      return;
+    }
+    const client = getOrCreateAiClient();
+    if (!aiIsListening) {
+      client.connect();
+    } else {
+      client.disconnect?.();
+      setAiIsListening(false);
+      setAiState("idle");
+    }
+  }, [apiKey, aiIsListening, getOrCreateAiClient]);
+
+  const handleAiSubmit = useCallback(async () => {
+    const text = aiQuery.trim();
+    if (!text) return;
+    if (!apiKey) {
+      setShowSettings(true);
+      return;
+    }
+    const client = getOrCreateAiClient();
+    setAiCurrentTurn({ user: text });
+    setAiQuery("");
+    setAiErrorMessage("");
+    const img = aiAttachedImage?.base64 || null;
+    setAiAttachedImage(null);
+    try {
+      await client.send(text, img);
+    } catch (e) {
+      setAiErrorMessage(e.message);
+    }
+  }, [aiQuery, apiKey, aiAttachedImage, getOrCreateAiClient]);
+
+  const handleAiInterrupt = useCallback(() => {
+    aiClientRef.current?.stopPlayback?.();
+    setAiState("listening");
+  }, []);
+
+  const handleAiToggleScreenShare = useCallback(async () => {
+    if (aiScreenShareActive) {
+      setAiScreenShareActive(false);
+      return;
+    }
+    if (window.talkedDesktop?.captureScreen) {
+      setAiIsCapturingScreen(true);
+      const base64 = await window.talkedDesktop.captureScreen();
+      setAiIsCapturingScreen(false);
+      if (base64) {
+        setAiAttachedImage({ base64, mimeType: "image/jpeg", name: "screenshot" });
+        setAiScreenShareActive(true);
+      }
+    }
+  }, [aiScreenShareActive]);
+
+  const aiGetFrequencyData = useCallback((arr) => {
+    return aiClientRef.current?.getFrequencyData(arr) ?? false;
+  }, []);
 
   const handleActivate = useCallback(async (result) => {
     if (!result) return;
@@ -610,6 +734,45 @@ export function App() {
           onTriggerAction={handleActionGridTrigger}
           onOpenSettings={() => setShowSettings(true)}
         />
+      )}
+
+      {activeMode === "ai" && (
+        <>          <SpotlightBar
+            state={aiState}
+            query={aiQuery}
+            setQuery={setAiQuery}
+            onSubmit={handleAiSubmit}
+            isListening={aiIsListening}
+            onToggleMic={handleAiToggleMic}
+            isMuted={aiIsMuted}
+            micLevel={aiMicLevel}
+            isUserSpeaking={aiIsUserSpeaking}
+            isTransmitting={aiIsTransmitting}
+            model={aiModel}
+            onSelectModel={setAiModel}
+            modelMenuOpen={aiModelMenuOpen}
+            setModelMenuOpen={setAiModelMenuOpen}
+            onDismiss={() => window.talkedDesktop?.hideWindow()}
+            hasApiKey={!!apiKey}
+            errorMessage={aiErrorMessage}
+            onOpenSettings={() => setShowSettings(true)}
+            onToggleScreenShare={handleAiToggleScreenShare}
+            screenShareActive={aiScreenShareActive}
+            isCapturingScreen={aiIsCapturingScreen}
+            attachedImage={aiAttachedImage}
+            onAttachImage={setAiAttachedImage}
+            onClearAttachment={() => setAiAttachedImage(null)}
+            windowPosition="center-top"
+          />
+          <DialogueFeed
+            turns={aiTurns}
+            currentTurn={aiCurrentTurn}
+            state={aiState}
+            micLevel={aiMicLevel}
+            onInterrupt={handleAiInterrupt}
+            getFrequencyData={aiGetFrequencyData}
+          />
+        </>
       )}
 
       {showSettings && (

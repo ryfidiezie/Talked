@@ -125,7 +125,11 @@ export function SettingsModal({ apiKey, position = "upper-center", defaultMode =
           <span className="guide-title">SHORTCUTS AND HOTKEYS</span>
           <div className="guide-row">
             <span className="guide-label">Toggle Launcher:</span>
-            <span className="guide-keys"><kbd className="key-cap">Alt</kbd>+<kbd className="key-cap">Space</kbd></span>
+            <span className="guide-keys">
+              {typeof process !== "undefined" && process.platform === "linux"
+                ? <><kbd className="key-cap">Ctrl</kbd>+<kbd className="key-cap">Space</kbd></>
+                : <><kbd className="key-cap">Alt</kbd>+<kbd className="key-cap">Space</kbd></>}
+            </span>
           </div>
           <div className="guide-row">
             <span className="guide-label">Switch Search / Grid:</span>
