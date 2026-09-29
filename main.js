@@ -1,7 +1,7 @@
 const { app, BrowserWindow, globalShortcut, ipcMain, screen, session, desktopCapturer, shell, clipboard, Notification } = require("electron");
 const path = require("path");
 const fs = require("fs");
-const { exec, execSync } = require("child_process");
+const { exec, execSync, execFile } = require("child_process");
 const https = require("https");
 const IS_LINUX = process.platform === "linux";
 
@@ -1166,7 +1166,7 @@ app.whenReady().then(() => {
             resolve({ stdout: (stdout || "").trim(), stderr: (stderr || "").trim(), exitCode: err ? err.code : 0 });
           });
         } else {
-          exec(`powershell -NoProfile -NonInteractive -Command "${cmd.replace(/"/g, '\\"')}"`, { windowsHide: true, timeout: 15000 }, (err, stdout, stderr) => {
+          execFile("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", cmd], { windowsHide: true, timeout: 15000 }, (err, stdout, stderr) => {
             resolve({ stdout: (stdout || "").trim(), stderr: (stderr || "").trim(), exitCode: err ? err.code : 0 });
           });
         }
