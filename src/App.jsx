@@ -157,7 +157,7 @@ function buildResults({ query, appResults, clipboardItems, directoryItems, isPat
 }
 
 export function App() {
-  const [apiKey, setApiKey] = useState(() => localStorage.getItem(STORAGE_API_KEY) || "");
+  const [apiKey, setApiKey] = useState("");
   const [position, setPosition] = useState(() => localStorage.getItem(STORAGE_POSITION) || "upper-center");
   const [defaultMode, setDefaultMode] = useState(() => localStorage.getItem(STORAGE_DEFAULT_MODE) || "search");
   const [activeMode, setActiveMode] = useState(() => localStorage.getItem(STORAGE_DEFAULT_MODE) || "search");
@@ -660,7 +660,6 @@ export function App() {
   }, [handleKeyDown]);
 
   const handleSaveSettings = ({ apiKey: newKey, position: newPos, defaultMode: newDefaultMode }) => {
-    localStorage.setItem(STORAGE_API_KEY, newKey);
     localStorage.setItem(STORAGE_POSITION, newPos);
     localStorage.setItem(STORAGE_DEFAULT_MODE, newDefaultMode);
     setApiKey(newKey);
