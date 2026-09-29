@@ -11,8 +11,15 @@ app.commandLine.appendSwitch("disable-background-timer-throttling");
 app.commandLine.appendSwitch("disable-renderer-backgrounding");
 
 
+if (IS_LINUX) {
+  app.commandLine.appendSwitch("disable-features", "VaapiVideoDecoder,VaapiVideoEncoder");
+  app.commandLine.appendSwitch("disable-accelerated-video-decode");
+  app.commandLine.appendSwitch("disable-accelerated-video-encode");
+}
+
 let mainWindow = null;
 let overlayWindow = null;
+let isQuitting = false;
 let previousWindowTitle = "";
 let pendingCommandResolvers = new Map();
 let commandConfirmCounter = 0;
@@ -203,6 +210,7 @@ function createWindow() {
 
   let isReadyForBlur = false;
   let blurHideTimer = null;
+  let isClosing = false;
 
   const bringToFront = () => {
     if (mainWindow && !mainWindow.isDestroyed()) {
@@ -228,14 +236,22 @@ function createWindow() {
   });
 
   mainWindow.on("blur", () => {
-    if (!isReadyForBlur) {
+    if (!isReadyForBlur || isClosing || isQuitting) {
       return;
     }
-    if (blurHideTimer) clearTimeout(blurHideTimer);
+    if (blurHideTimer) {
+      clearTimeout(blurHideTimer);
+      blurHideTimer = null;
+    }
     blurHideTimer = setTimeout(() => {
-      if (mainWindow && !mainWindow.isDestroyed() && mainWindow.isVisible() && !mainWindow.isFocused()) {
-        mainWindow.webContents.send("toggle-talked", { action: "blur" });
-        mainWindow.hide();
+      blurHideTimer = null;
+      if (!isClosing && !isQuitting && mainWindow && !mainWindow.isDestroyed() && mainWindow.isVisible() && !mainWindow.isFocused()) {
+        try {
+          if (mainWindow.webContents && !mainWindow.webContents.isDestroyed()) {
+            mainWindow.webContents.send("toggle-talked", { action: "blur" });
+          }
+          mainWindow.hide();
+        } catch (_) {}
       }
     }, IS_LINUX ? 80 : 0);
   });
@@ -247,7 +263,26 @@ function createWindow() {
     }
   });
 
+  mainWindow.on("close", () => {
+    isClosing = true;
+    if (blurHideTimer) {
+      clearTimeout(blurHideTimer);
+      blurHideTimer = null;
+    }
+  });
+
   mainWindow.on("closed", () => {
+    isClosing = true;
+    if (blurHideTimer) {
+      clearTimeout(blurHideTimer);
+      blurHideTimer = null;
+    }
+    if (overlayWindow && !overlayWindow.isDestroyed()) {
+      try {
+        overlayWindow.destroy();
+      } catch (_) {}
+      overlayWindow = null;
+    }
     mainWindow = null;
   });
 }
@@ -299,16 +334,23 @@ function calculateWindowPosition(positionKey, winWidth, winHeight) {
 }
 
 function toggleWindow() {
+  if (isQuitting) return;
   if (!mainWindow || mainWindow.isDestroyed()) {
     createWindow();
     return;
   }
 
   if (mainWindow.isVisible()) {
-    mainWindow.webContents.send("toggle-talked", { action: "hide" });
+    try {
+      if (mainWindow.webContents && !mainWindow.webContents.isDestroyed()) {
+        mainWindow.webContents.send("toggle-talked", { action: "hide" });
+      }
+    } catch (_) {}
     setTimeout(() => {
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.hide();
+      if (mainWindow && !mainWindow.isDestroyed() && !isQuitting) {
+        try {
+          mainWindow.hide();
+        } catch (_) {}
       }
     }, 80);
   } else {
@@ -325,7 +367,11 @@ function toggleWindow() {
     } else {
       mainWindow.setAlwaysOnTop(true, "screen-saver");
     }
-    mainWindow.webContents.send("toggle-talked", { action: "activate" });
+    try {
+      if (mainWindow.webContents && !mainWindow.webContents.isDestroyed()) {
+        mainWindow.webContents.send("toggle-talked", { action: "activate" });
+      }
+    } catch (_) {}
   }
 }
 
@@ -646,11 +692,17 @@ app.whenReady().then(() => {
   });
 
   ipcMain.on("hide-talked", () => {
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send("toggle-talked", { action: "hide" });
+    if (mainWindow && !mainWindow.isDestroyed() && !isQuitting) {
+      try {
+        if (mainWindow.webContents && !mainWindow.webContents.isDestroyed()) {
+          mainWindow.webContents.send("toggle-talked", { action: "hide" });
+        }
+      } catch (_) {}
       setTimeout(() => {
-        if (mainWindow && !mainWindow.isDestroyed()) {
-          mainWindow.hide();
+        if (mainWindow && !mainWindow.isDestroyed() && !isQuitting) {
+          try {
+            mainWindow.hide();
+          } catch (_) {}
         }
       }, 120);
     }
@@ -1181,6 +1233,10 @@ app.whenReady().then(() => {
       createWindow();
     }
   });
+});
+
+app.on("before-quit", () => {
+  isQuitting = true;
 });
 
 app.on("will-quit", () => {
