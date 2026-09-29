@@ -9,9 +9,7 @@ app.commandLine.appendSwitch("autoplay-policy", "no-user-gesture-required");
 app.commandLine.appendSwitch("use-fake-ui-for-media-stream");
 app.commandLine.appendSwitch("disable-background-timer-throttling");
 app.commandLine.appendSwitch("disable-renderer-backgrounding");
-if (IS_LINUX) {
-  app.commandLine.appendSwitch("enable-transparent-visuals");
-}
+
 
 let mainWindow = null;
 let overlayWindow = null;
@@ -157,7 +155,11 @@ function createOverlayWindow() {
     }
   });
 
-  overlayWindow.setIgnoreMouseEvents(true, { forward: true });
+  if (IS_LINUX) {
+    overlayWindow.setIgnoreMouseEvents(true);
+  } else {
+    overlayWindow.setIgnoreMouseEvents(true, { forward: true });
+  }
   overlayWindow.loadFile(path.join(__dirname, "overlay.html"));
 
   overlayWindow.on("closed", () => {
@@ -202,14 +204,16 @@ function createWindow() {
   let isReadyForBlur = false;
   let blurHideTimer = null;
 
-  const alwaysOnTopLevel = IS_LINUX ? "pop-up-menu" : "screen-saver";
-
   const bringToFront = () => {
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.show();
       mainWindow.focus();
       mainWindow.moveTop();
-      mainWindow.setAlwaysOnTop(true, alwaysOnTopLevel);
+      if (IS_LINUX) {
+        mainWindow.setAlwaysOnTop(true);
+      } else {
+        mainWindow.setAlwaysOnTop(true, "screen-saver");
+      }
       setTimeout(() => {
         isReadyForBlur = true;
       }, 1200);
@@ -316,7 +320,11 @@ function toggleWindow() {
     mainWindow.show();
     mainWindow.focus();
     mainWindow.moveTop();
-    mainWindow.setAlwaysOnTop(true, IS_LINUX ? "pop-up-menu" : "screen-saver");
+    if (IS_LINUX) {
+      mainWindow.setAlwaysOnTop(true);
+    } else {
+      mainWindow.setAlwaysOnTop(true, "screen-saver");
+    }
     mainWindow.webContents.send("toggle-talked", { action: "activate" });
   }
 }
