@@ -681,7 +681,7 @@ app.whenReady().then(() => {
   ipcMain.handle("open-path", async (event, targetPath) => {
     try {
       if (process.platform === "linux") {
-        exec(`xdg-open "${targetPath.replace(/"/g, '\\"')}"`, () => {});
+        execFile("xdg-open", [targetPath], () => {});
         return { success: true };
       }
       const res = await shell.openPath(targetPath);
